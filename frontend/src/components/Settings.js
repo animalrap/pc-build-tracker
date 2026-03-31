@@ -1,66 +1,212 @@
 import React, { useEffect, useState } from 'react';
-import { api } from '../App';
+import { api, useToast } from '../App';
 
 export default function Settings() {
   const [form, setForm] = useState({
-    discord_webhook: '', email_from: '', email_to: '',
-    email_password: '', email_smtp_host: 'smtp.gmail.com',
-    email_smtp_port: 587, check_interval_minutes: 60,
-    total_budget: 0, pricesapi_key: '',
+    discord_webhook: '',
+    email_from: '', email_to: '',
+    email_password: '',
+    email_smtp_host: 'smtp.gmail.com',
+    email_smtp_port: 587,
+    check_interval_minutes: 120,
+    total_budget: 0,
+    pricesapi_key: '',
+    slickdeals_enabled: 1,
   });
-  const [saved, setSaved] = useState(false);
-  const [testing, setTesting] = useState(false);
-  const [testResult, setTestResult] = useState(null);
+  const [hasApiKey, setHasApiKey]         = useState(false);
+  const [hasEmailPw, setHasEmailPw]       = useState(false);
+  const showToast = useToast();
+  const [testing, setTesting]             = useState(false);
+  const [testResult, setTestResult]       = useState(null);
+  const [quota, setQuota]                 = useState(null);
 
   useEffect(() => {
     api('/settings').then(s => {
-      if (Object.keys(s).length) setForm(f => ({ ...f, ...s }));
+      if (!s || !Object.keys(s).length) return;
+      setHasApiKey(!!s.has_pricesapi_key);
+      setHasEmailPw(!!s.has_email_password);
+      // Don't overwrite secret fields with empty string from server
+      setForm(f => ({
+        ...f,
+        discord_webhook:        s.discord_webhook        ?? f.discord_webhook,
+        email_from:             s.email_from             ?? f.email_from,
+        email_to:               s.email_to               ?? f.email_to,
+        email_smtp_host:        s.email_smtp_host        ?? f.email_smtp_host,
+        email_smtp_port:        s.email_smtp_port        ?? f.email_smtp_port,
+        check_interval_minutes: s.check_interval_minutes ?? f.check_interval_minutes,
+        total_budget:           s.total_budget           ?? f.total_budget,
+        slickdeals_enabled:     s.slickdeals_enabled     ?? f.slickdeals_enabled,
+        // leave pricesapi_key and email_password blank — user must re-enter to change
+      }));
     });
+    api('/quota').then(setQuota).catch(() => {});
   }, []);
 
   const field = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
   const save = async () => {
-    await api('/settings', { method: 'POST', body: JSON.stringify(form) });
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2500);
+    try {
+      const res = await api('/settings', {
+        method: 'POST',
+        body: JSON.stringify(form),
+      });
+      if (res && res.ok) {
+        if (form.pricesapi_key) setHasApiKey(true);
+        if (form.email_password) setHasEmailPw(true);
+        setForm(f => ({ ...f, pricesapi_key: '', email_password: '' }));
+        api('/quota').then(setQuota).catch(() => {});
+        showToast('Settings saved!');
+      } else {
+        showToast('Save failed — check logs', 'error');
+      }
+    } catch (e) {
+      showToast(`Error: ${e.message}`, 'error');
+    }
   };
 
   const testDiscord = async () => {
     setTesting(true);
     setTestResult(null);
     try {
-      await api('/settings/test-discord', { method: 'POST' });
-      setTestResult('success');
+      const res = await api('/settings/test-discord', { method: 'POST' });
+      const ok = res && res.ok;
+      setTestResult(ok ? 'success' : 'error');
+      showToast(ok ? 'Test message sent to Discord!' : 'Discord test failed', ok ? 'success' : 'error');
     } catch {
       setTestResult('error');
+      showToast('Discord test failed', 'error');
     }
     setTesting(false);
   };
 
+  const quotaColor = quota
+    ? quota.headroom_percent > 30 ? '#34d399'
+      : quota.headroom_percent > 10 ? '#fbbf24'
+      : '#f87171'
+    : '#64748b';
+
   return (
     <div style={{ maxWidth: 640 }}>
 
-      {/* PricesAPI */}
+      {/* Price sources */}
       <div className="card" style={{ marginBottom: 16 }}>
-        <div className="section-title">PricesAPI.io</div>
-        <div className="form-group" style={{ marginBottom: 10 }}>
-          <label className="form-label">API key</label>
-          <input className="form-input" placeholder="Your PricesAPI.io key"
+        <div className="section-title">Price sources</div>
+
+        <div className="form-group" style={{ marginBottom: 16 }}>
+          <label className="form-label">
+            PricesAPI.io key
+            {hasApiKey && (
+              <span style={{ marginLeft: 8, fontSize: 11, color: '#34d399', fontWeight: 400 }}>
+                ✓ key saved
+              </span>
+            )}
+          </label>
+          <input
+            className="form-input"
+            type="password"
+            placeholder={hasApiKey ? '••••••••  (leave blank to keep existing)' : 'Paste your API key from pricesapi.io'}
             value={form.pricesapi_key}
-            onChange={e => field('pricesapi_key', e.target.value)} />
+            onChange={e => field('pricesapi_key', e.target.value)}
+          />
+          <div style={{ fontSize: 12, color: '#64748b', marginTop: 4, lineHeight: 1.6 }}>
+            Free tier: 1,000 calls/month · Covers Amazon, Newegg, Best Buy, B&H
+          </div>
         </div>
-        <div style={{ fontSize: 12, color: '#64748b', lineHeight: 1.6 }}>
-          Sign up at <span style={{ color: '#60a5fa' }}>pricesapi.io</span> — free tier includes 1,000 calls/month.
-          Covers Newegg, Amazon, Best Buy, and B&amp;H Photo.
-          SlickDeals RSS deal alerts run automatically alongside this at no cost.
+
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          padding: '12px 0', borderTop: '1px solid #1e2536',
+        }}>
+          <div>
+            <div style={{ fontSize: 13, color: '#e2e8f0', fontWeight: 500 }}>SlickDeals RSS</div>
+            <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>
+              Free community deal alerts — no API calls used
+            </div>
+          </div>
+          <button
+            onClick={() => field('slickdeals_enabled', form.slickdeals_enabled ? 0 : 1)}
+            style={{
+              width: 44, height: 24, borderRadius: 12, border: 'none', cursor: 'pointer',
+              background: form.slickdeals_enabled ? '#2563eb' : '#2d3748',
+              position: 'relative', transition: 'background 0.2s', flexShrink: 0,
+            }}
+          >
+            <div style={{
+              width: 18, height: 18, borderRadius: '50%', background: '#fff',
+              position: 'absolute', top: 3,
+              left: form.slickdeals_enabled ? 23 : 3,
+              transition: 'left 0.2s',
+            }} />
+          </button>
+        </div>
+      </div>
+
+      {/* Quota advisor */}
+      {quota && (
+        <div className="card" style={{ marginBottom: 16 }}>
+          <div className="section-title">API quota advisor</div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 12 }}>
+            <div className="stat-card" style={{ padding: 12 }}>
+              <div className="stat-label">Parts tracked</div>
+              <div className="stat-value blue" style={{ fontSize: 20 }}>{quota.part_count}</div>
+            </div>
+            <div className="stat-card" style={{ padding: 12 }}>
+              <div className="stat-label">Est. calls/month</div>
+              <div className="stat-value" style={{ fontSize: 20, color: quotaColor }}>
+                {quota.estimated_calls_per_month}
+                <span style={{ fontSize: 11, color: '#64748b' }}>/1000</span>
+              </div>
+            </div>
+            <div className="stat-card" style={{ padding: 12 }}>
+              <div className="stat-label">Headroom</div>
+              <div className="stat-value" style={{ fontSize: 20, color: quotaColor }}>
+                {quota.headroom_percent}%
+              </div>
+            </div>
+          </div>
+          <div style={{ fontSize: 12, color: '#64748b', lineHeight: 1.7 }}>
+            Recommended for {quota.part_count} part{quota.part_count !== 1 ? 's' : ''}:{' '}
+            <span style={{ color: '#e2e8f0', fontWeight: 500 }}>
+              every {quota.recommended_interval_minutes} min
+            </span>
+            {form.check_interval_minutes < quota.recommended_interval_minutes && (
+              <span style={{ color: '#fbbf24' }}>
+                {' '}— your current {form.check_interval_minutes}min interval may exceed quota.
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Tracking */}
+      <div className="card" style={{ marginBottom: 16 }}>
+        <div className="section-title">Tracking settings</div>
+        <div className="form-row">
+          <div className="form-group">
+            <label className="form-label">Check interval</label>
+            <select className="form-input" value={form.check_interval_minutes}
+              onChange={e => field('check_interval_minutes', parseInt(e.target.value))}>
+              <option value={30}>Every 30 minutes</option>
+              <option value={60}>Every hour</option>
+              <option value={120}>Every 2 hours</option>
+              <option value={180}>Every 3 hours</option>
+              <option value={360}>Every 6 hours</option>
+              <option value={720}>Every 12 hours</option>
+            </select>
+          </div>
+          <div className="form-group">
+            <label className="form-label">Total build budget ($)</label>
+            <input className="form-input" type="number" placeholder="2000"
+              value={form.total_budget}
+              onChange={e => field('total_budget', parseFloat(e.target.value) || 0)} />
+          </div>
         </div>
       </div>
 
       {/* Discord */}
       <div className="card" style={{ marginBottom: 16 }}>
         <div className="section-title">Discord notifications</div>
-        <div className="form-group" style={{ marginBottom: 12 }}>
+        <div className="form-group" style={{ marginBottom: 8 }}>
           <label className="form-label">Webhook URL</label>
           <div style={{ display: 'flex', gap: 8 }}>
             <input className="form-input" style={{ flex: 1 }}
@@ -72,14 +218,11 @@ export default function Settings() {
             </button>
           </div>
           {testResult === 'success' && (
-            <div style={{ fontSize: 12, color: '#34d399', marginTop: 4 }}>Test message sent!</div>
+            <div style={{ fontSize: 12, color: '#34d399', marginTop: 4 }}>Sent! Check your Discord channel.</div>
           )}
           {testResult === 'error' && (
-            <div style={{ fontSize: 12, color: '#f87171', marginTop: 4 }}>Failed — save settings first, then test.</div>
+            <div style={{ fontSize: 12, color: '#f87171', marginTop: 4 }}>Failed — save first, then test.</div>
           )}
-        </div>
-        <div style={{ fontSize: 12, color: '#64748b', lineHeight: 1.6 }}>
-          Create a webhook in Discord: right-click any channel → Edit Channel → Integrations → Webhooks → New Webhook → Copy URL
         </div>
       </div>
 
@@ -100,9 +243,18 @@ export default function Settings() {
         </div>
         <div className="form-row">
           <div className="form-group">
-            <label className="form-label">App password</label>
-            <input className="form-input" type="password" placeholder="Gmail app password"
-              value={form.email_password} onChange={e => field('email_password', e.target.value)} />
+            <label className="form-label">
+              App password
+              {hasEmailPw && (
+                <span style={{ marginLeft: 8, fontSize: 11, color: '#34d399', fontWeight: 400 }}>
+                  ✓ saved
+                </span>
+              )}
+            </label>
+            <input className="form-input" type="password"
+              placeholder={hasEmailPw ? '••••••••  (leave blank to keep existing)' : 'Gmail app password'}
+              value={form.email_password}
+              onChange={e => field('email_password', e.target.value)} />
           </div>
           <div className="form-group">
             <label className="form-label">SMTP host</label>
@@ -111,42 +263,12 @@ export default function Settings() {
           </div>
         </div>
         <div style={{ fontSize: 12, color: '#64748b', lineHeight: 1.6 }}>
-          For Gmail, generate an App Password at <span style={{ color: '#60a5fa' }}>myaccount.google.com/apppasswords</span>.
-          Do not use your regular Gmail password.
+          Gmail users: generate an App Password at myaccount.google.com/apppasswords
         </div>
       </div>
 
-      {/* Tracking */}
-      <div className="card" style={{ marginBottom: 16 }}>
-        <div className="section-title">Tracking settings</div>
-        <div className="form-row">
-          <div className="form-group">
-            <label className="form-label">Check interval</label>
-            <select className="form-input" value={form.check_interval_minutes}
-              onChange={e => field('check_interval_minutes', parseInt(e.target.value))}>
-              <option value={60}>Every hour</option>
-              <option value={120}>Every 2 hours</option>
-              <option value={180}>Every 3 hours</option>
-              <option value={360}>Every 6 hours</option>
-              <option value={720}>Every 12 hours</option>
-            </select>
-          </div>
-          <div className="form-group">
-            <label className="form-label">Total build budget ($)</label>
-            <input className="form-input" type="number" placeholder="2000"
-              value={form.total_budget} onChange={e => field('total_budget', parseFloat(e.target.value))} />
-          </div>
-        </div>
-        <div style={{ fontSize: 12, color: '#64748b', lineHeight: 1.6 }}>
-          With 1,000 free API calls/month: every hour supports ~1 part, every 2 hours supports ~2 parts, every 3 hours supports ~4 parts.
-          SlickDeals RSS checks don't count against your API quota.
-        </div>
-      </div>
+      <button className="btn btn-primary" onClick={save}>Save settings</button>
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-        <button className="btn btn-primary" onClick={save}>Save settings</button>
-        {saved && <span style={{ fontSize: 13, color: '#34d399' }}>Settings saved!</span>}
-      </div>
     </div>
   );
 }

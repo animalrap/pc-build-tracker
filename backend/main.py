@@ -192,24 +192,29 @@ def get_settings():
         if not row:
             return {}
         d = dict(row)
-        d.pop("email_password", None)
-        d.pop("pricesapi_key", None)  # never expose keys to frontend
+        # Never expose secrets — return boolean presence flags instead
+        d["has_email_password"] = bool(d.pop("email_password", ""))
+        d["has_pricesapi_key"]  = bool(d.pop("pricesapi_key", ""))
         return d
 
 
 @app.post("/api/settings")
 def save_settings(s: Settings):
     with get_db() as db:
-        existing = db.execute("SELECT id FROM settings WHERE id=1").fetchone()
+        existing = db.execute("SELECT * FROM settings WHERE id=1").fetchone()
         if existing:
+            existing = dict(existing)
+            # Preserve existing secrets if the submitted value is blank
+            email_password = s.email_password if s.email_password else existing.get("email_password", "")
+            pricesapi_key  = s.pricesapi_key  if s.pricesapi_key  else existing.get("pricesapi_key", "")
             db.execute(
                 """UPDATE settings SET discord_webhook=?, email_from=?, email_to=?,
                    email_password=?, email_smtp_host=?, email_smtp_port=?,
                    check_interval_minutes=?, total_budget=?,
                    pricesapi_key=?, slickdeals_enabled=? WHERE id=1""",
-                (s.discord_webhook, s.email_from, s.email_to, s.email_password,
+                (s.discord_webhook, s.email_from, s.email_to, email_password,
                  s.email_smtp_host, s.email_smtp_port, s.check_interval_minutes,
-                 s.total_budget, s.pricesapi_key, s.slickdeals_enabled)
+                 s.total_budget, pricesapi_key, s.slickdeals_enabled)
             )
         else:
             db.execute(

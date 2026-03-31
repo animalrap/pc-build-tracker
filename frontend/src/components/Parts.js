@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { api } from '../App';
+import { api, useToast } from '../App';
 
 const CATEGORIES = ['Motherboard', 'CPU', 'GPU', 'RAM', 'Storage', 'Case', 'PSU', 'Cooling', 'Other'];
 
@@ -21,6 +21,7 @@ export default function Parts() {
   const [liveResults, setLiveResults] = useState([]);
   const [searching, setSearching] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
+  const showToast = useToast();
 
   const load = () => {
     api('/parts').then(p => { setParts(p); setLoading(false); });
@@ -58,12 +59,14 @@ export default function Parts() {
     }
     load();
     closeModal();
+    showToast(editPart ? 'Part updated!' : 'Part added!');
   };
 
   const deletePart = async (id) => {
     await api(`/parts/${id}`, { method: 'DELETE' });
     setDeleteConfirm(null);
     load();
+    showToast('Part deleted', 'error');
   };
 
   const searchLive = async () => {
