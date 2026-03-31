@@ -9,7 +9,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional
-from price_checker import check_all_parts, get_shopping_prices
+from price_checker import check_all_parts, get_prices
 from notifier import send_discord, send_email
 from db import init_db, get_db
 
@@ -54,7 +54,6 @@ class Settings(BaseModel):
     email_smtp_port: Optional[int] = 587
     check_interval_minutes: Optional[int] = 120
     total_budget: Optional[float] = 0
-    pricesapi_key: Optional[str] = ""
     pricesapi_key: Optional[str] = ""
     slickdeals_enabled: Optional[int] = 1
 
@@ -136,15 +135,20 @@ def fetch_prices_now(part_id: int, query: Optional[str] = None):
     Otherwise look up the part's search_query from the DB.
     part_id=0 is a sentinel value meaning "ad-hoc query, no part".
     """
+    with get_db() as db:
+        settings = db.execute("SELECT * FROM settings WHERE id=1").fetchone()
+    settings = dict(settings) if settings else {}
+    api_key = settings.get("pricesapi_key", "")
+    use_slickdeals = bool(settings.get("slickdeals_enabled", 1))
+
     if query:
-        results = get_shopping_prices(query)
-        return results
+        return get_prices(query, api_key, use_slickdeals)
+
     with get_db() as db:
         part = db.execute("SELECT * FROM parts WHERE id=?", (part_id,)).fetchone()
         if not part:
             raise HTTPException(status_code=404, detail="Part not found")
-        results = get_shopping_prices(dict(part)["search_query"])
-        return results
+        return get_prices(dict(part)["search_query"], api_key, use_slickdeals)
 
 
 # ── Build summary ─────────────────────────────────────────────────────────────
