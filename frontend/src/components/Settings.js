@@ -5,7 +5,8 @@ export default function Settings() {
   const [form, setForm] = useState({
     discord_webhook: '', email_from: '', email_to: '',
     email_password: '', email_smtp_host: 'smtp.gmail.com',
-    email_smtp_port: 587, check_interval_minutes: 60, total_budget: 0,
+    email_smtp_port: 587, check_interval_minutes: 60,
+    total_budget: 0, pricesapi_key: '',
   });
   const [saved, setSaved] = useState(false);
   const [testing, setTesting] = useState(false);
@@ -40,10 +41,25 @@ export default function Settings() {
   return (
     <div style={{ maxWidth: 640 }}>
 
-      {/* Notifications */}
+      {/* PricesAPI */}
+      <div className="card" style={{ marginBottom: 16 }}>
+        <div className="section-title">PricesAPI.io</div>
+        <div className="form-group" style={{ marginBottom: 10 }}>
+          <label className="form-label">API key</label>
+          <input className="form-input" placeholder="Your PricesAPI.io key"
+            value={form.pricesapi_key}
+            onChange={e => field('pricesapi_key', e.target.value)} />
+        </div>
+        <div style={{ fontSize: 12, color: '#64748b', lineHeight: 1.6 }}>
+          Sign up at <span style={{ color: '#60a5fa' }}>pricesapi.io</span> — free tier includes 1,000 calls/month.
+          Covers Newegg, Amazon, Best Buy, and B&amp;H Photo.
+          SlickDeals RSS deal alerts run automatically alongside this at no cost.
+        </div>
+      </div>
+
+      {/* Discord */}
       <div className="card" style={{ marginBottom: 16 }}>
         <div className="section-title">Discord notifications</div>
-
         <div className="form-group" style={{ marginBottom: 12 }}>
           <label className="form-label">Webhook URL</label>
           <div style={{ display: 'flex', gap: 8 }}>
@@ -56,13 +72,12 @@ export default function Settings() {
             </button>
           </div>
           {testResult === 'success' && (
-            <div style={{ fontSize: 12, color: '#34d399', marginTop: 4 }}>Test message sent successfully!</div>
+            <div style={{ fontSize: 12, color: '#34d399', marginTop: 4 }}>Test message sent!</div>
           )}
           {testResult === 'error' && (
-            <div style={{ fontSize: 12, color: '#f87171', marginTop: 4 }}>Failed — check your webhook URL and save first.</div>
+            <div style={{ fontSize: 12, color: '#f87171', marginTop: 4 }}>Failed — save settings first, then test.</div>
           )}
         </div>
-
         <div style={{ fontSize: 12, color: '#64748b', lineHeight: 1.6 }}>
           Create a webhook in Discord: right-click any channel → Edit Channel → Integrations → Webhooks → New Webhook → Copy URL
         </div>
@@ -71,7 +86,6 @@ export default function Settings() {
       {/* Email */}
       <div className="card" style={{ marginBottom: 16 }}>
         <div className="section-title">Email notifications</div>
-
         <div className="form-row">
           <div className="form-group">
             <label className="form-label">From address</label>
@@ -84,7 +98,6 @@ export default function Settings() {
               value={form.email_to} onChange={e => field('email_to', e.target.value)} />
           </div>
         </div>
-
         <div className="form-row">
           <div className="form-group">
             <label className="form-label">App password</label>
@@ -97,7 +110,6 @@ export default function Settings() {
               value={form.email_smtp_host} onChange={e => field('email_smtp_host', e.target.value)} />
           </div>
         </div>
-
         <div style={{ fontSize: 12, color: '#64748b', lineHeight: 1.6 }}>
           For Gmail, generate an App Password at <span style={{ color: '#60a5fa' }}>myaccount.google.com/apppasswords</span>.
           Do not use your regular Gmail password.
@@ -107,15 +119,14 @@ export default function Settings() {
       {/* Tracking */}
       <div className="card" style={{ marginBottom: 16 }}>
         <div className="section-title">Tracking settings</div>
-
         <div className="form-row">
           <div className="form-group">
-            <label className="form-label">Check interval (minutes)</label>
+            <label className="form-label">Check interval</label>
             <select className="form-input" value={form.check_interval_minutes}
               onChange={e => field('check_interval_minutes', parseInt(e.target.value))}>
-              <option value={30}>Every 30 minutes</option>
               <option value={60}>Every hour</option>
               <option value={120}>Every 2 hours</option>
+              <option value={180}>Every 3 hours</option>
               <option value={360}>Every 6 hours</option>
               <option value={720}>Every 12 hours</option>
             </select>
@@ -126,9 +137,9 @@ export default function Settings() {
               value={form.total_budget} onChange={e => field('total_budget', parseFloat(e.target.value))} />
           </div>
         </div>
-
         <div style={{ fontSize: 12, color: '#64748b', lineHeight: 1.6 }}>
-          A shorter interval means faster alerts but more requests. 60 minutes is recommended to be polite to retailers.
+          With 1,000 free API calls/month: every hour supports ~1 part, every 2 hours supports ~2 parts, every 3 hours supports ~4 parts.
+          SlickDeals RSS checks don't count against your API quota.
         </div>
       </div>
 

@@ -52,8 +52,11 @@ class Settings(BaseModel):
     email_password: Optional[str] = ""
     email_smtp_host: Optional[str] = "smtp.gmail.com"
     email_smtp_port: Optional[int] = 587
-    check_interval_minutes: Optional[int] = 60
+    check_interval_minutes: Optional[int] = 120
     total_budget: Optional[float] = 0
+    pricesapi_key: Optional[str] = ""
+    pricesapi_key: Optional[str] = ""
+    slickdeals_enabled: Optional[int] = 1
 
 
 # ── Parts CRUD ────────────────────────────────────────────────────────────────
@@ -185,7 +188,8 @@ def get_settings():
         if not row:
             return {}
         d = dict(row)
-        d.pop("email_password", None)  # never send password to frontend
+        d.pop("email_password", None)
+        d.pop("pricesapi_key", None)  # never expose keys to frontend
         return d
 
 
@@ -197,21 +201,41 @@ def save_settings(s: Settings):
             db.execute(
                 """UPDATE settings SET discord_webhook=?, email_from=?, email_to=?,
                    email_password=?, email_smtp_host=?, email_smtp_port=?,
-                   check_interval_minutes=?, total_budget=? WHERE id=1""",
+                   check_interval_minutes=?, total_budget=?,
+                   pricesapi_key=?, slickdeals_enabled=? WHERE id=1""",
                 (s.discord_webhook, s.email_from, s.email_to, s.email_password,
-                 s.email_smtp_host, s.email_smtp_port, s.check_interval_minutes, s.total_budget)
+                 s.email_smtp_host, s.email_smtp_port, s.check_interval_minutes,
+                 s.total_budget, s.pricesapi_key, s.slickdeals_enabled)
             )
         else:
             db.execute(
                 """INSERT INTO settings (id, discord_webhook, email_from, email_to,
                    email_password, email_smtp_host, email_smtp_port,
-                   check_interval_minutes, total_budget)
-                   VALUES (1,?,?,?,?,?,?,?,?)""",
+                   check_interval_minutes, total_budget, pricesapi_key, slickdeals_enabled)
+                   VALUES (1,?,?,?,?,?,?,?,?,?,?)""",
                 (s.discord_webhook, s.email_from, s.email_to, s.email_password,
-                 s.email_smtp_host, s.email_smtp_port, s.check_interval_minutes, s.total_budget)
+                 s.email_smtp_host, s.email_smtp_port, s.check_interval_minutes,
+                 s.total_budget, s.pricesapi_key, s.slickdeals_enabled)
             )
     restart_scheduler()
     return {"ok": True}
+
+
+@app.get("/api/quota")
+def quota_advice():
+    """Return recommended check interval based on part count and API limits."""
+    from price_checker import recommended_interval_minutes
+    with get_db() as db:
+        count = db.execute("SELECT COUNT(*) as n FROM parts").fetchone()["n"]
+    recommended = recommended_interval_minutes(count)
+    calls_per_month = int((60 / recommended) * 24 * 30 * count)
+    return {
+        "part_count": count,
+        "recommended_interval_minutes": recommended,
+        "estimated_calls_per_month": calls_per_month,
+        "monthly_limit": 1000,
+        "headroom_percent": round((1 - calls_per_month / 1000) * 100, 1),
+    }
 
 
 @app.post("/api/settings/test-discord")

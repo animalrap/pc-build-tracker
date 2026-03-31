@@ -46,9 +46,15 @@ def init_db():
                 email_smtp_host TEXT DEFAULT 'smtp.gmail.com',
                 email_smtp_port INTEGER DEFAULT 587,
                 check_interval_minutes INTEGER DEFAULT 60,
-                total_budget REAL DEFAULT 0
+                total_budget REAL DEFAULT 0,
+                pricesapi_key TEXT DEFAULT ''
             );
         """)
+        # Migrate existing DBs that predate pricesapi_key column
+        try:
+            db.execute("ALTER TABLE settings ADD COLUMN pricesapi_key TEXT DEFAULT ''")
+        except Exception:
+            pass  # column already exists, that's fine
 
 
 @contextmanager
