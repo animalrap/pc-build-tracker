@@ -23,22 +23,53 @@ BROWSER_HEADERS = {
 def fetch_pricesapi(query: str, api_key: str) -> list[dict]:
     if not api_key:
         return []
+
+    headers = {"x-api-key": api_key}
+    base = "https://api.pricesapi.io/api/v1"
+
+    # Step 1 — search for products matching the query
     try:
         resp = requests.get(
-            "https://api.pricesapi.io/v1/search",
-            headers={"X-API-Key": api_key},
-            params={"q": query, "country": "us"},
+            f"{base}/products/search",
+            headers=headers,
+            params={"q": query, "limit": 5},
             timeout=15,
         )
         resp.raise_for_status()
         data = resp.json()
     except Exception as e:
-        log.warning(f"PricesAPI error for '{query}': {e}")
+        log.warning(f"PricesAPI search error for '{query}': {e}")
+        return []
+
+    products = data.get("data", {}).get("results", [])
+    if not products:
+        log.info(f"    PricesAPI: no products found for '{query}'")
+        return []
+
+    # Step 2 — fetch offers for the best matching product (first result)
+    product_id = products[0].get("id")
+    if not product_id:
+        return []
+
+    try:
+        resp = requests.get(
+            f"{base}/products/{product_id}/offers",
+            headers=headers,
+            params={"country": "us"},
+            timeout=30,  # real-time scraping can take up to 30s per docs
+        )
+        resp.raise_for_status()
+        data = resp.json()
+    except Exception as e:
+        log.warning(f"PricesAPI offers error for product {product_id}: {e}")
         return []
 
     results = []
-    items = data if isinstance(data, list) else data.get("results", data.get("products", []))
-    for item in items:
+    offers = data.get("data", {}).get("offers", data.get("data", []))
+    if isinstance(offers, dict):
+        offers = offers.get("results", [])
+
+    for item in offers:
         try:
             price_raw = (
                 item.get("price")
@@ -52,7 +83,7 @@ def fetch_pricesapi(query: str, api_key: str) -> list[dict]:
                 item.get("store")
                 or item.get("merchant")
                 or item.get("retailer")
-                or item.get("source")
+                or item.get("seller")
                 or "Unknown"
             )
             url   = item.get("url") or item.get("link") or item.get("productUrl") or ""
@@ -68,7 +99,7 @@ def fetch_pricesapi(query: str, api_key: str) -> list[dict]:
         except (ValueError, TypeError):
             continue
 
-    log.info(f"    PricesAPI: {len(results)} result(s)")
+    log.info(f"    PricesAPI: {len(results)} offer(s) for '{query}'")
     return results
 
 
