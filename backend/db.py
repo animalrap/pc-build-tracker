@@ -45,16 +45,24 @@ def init_db():
                 email_password TEXT DEFAULT '',
                 email_smtp_host TEXT DEFAULT 'smtp.gmail.com',
                 email_smtp_port INTEGER DEFAULT 587,
-                check_interval_minutes INTEGER DEFAULT 60,
+                check_interval_minutes INTEGER DEFAULT 120,
                 total_budget REAL DEFAULT 0,
-                pricesapi_key TEXT DEFAULT ''
+                pricesapi_key TEXT DEFAULT '',
+                slickdeals_enabled INTEGER DEFAULT 1
             );
         """)
-        # Migrate existing DBs that predate pricesapi_key column
-        try:
-            db.execute("ALTER TABLE settings ADD COLUMN pricesapi_key TEXT DEFAULT ''")
-        except Exception:
-            pass  # column already exists, that's fine
+
+        # Safe migrations for existing DBs — ignore errors if column already exists
+        migrations = [
+            "ALTER TABLE settings ADD COLUMN pricesapi_key TEXT DEFAULT ''",
+            "ALTER TABLE settings ADD COLUMN slickdeals_enabled INTEGER DEFAULT 1",
+            "ALTER TABLE settings ADD COLUMN total_budget REAL DEFAULT 0",
+        ]
+        for sql in migrations:
+            try:
+                db.execute(sql)
+            except Exception:
+                pass  # column already exists
 
 
 @contextmanager

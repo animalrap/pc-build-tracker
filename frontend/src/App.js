@@ -11,7 +11,16 @@ export function api(path, opts = {}) {
   return fetch(API + path, {
     headers: { 'Content-Type': 'application/json' },
     ...opts,
-  }).then(r => r.json());
+  }).then(async r => {
+    const text = await r.text();
+    if (!text) return {};
+    try {
+      return JSON.parse(text);
+    } catch {
+      console.error(`Non-JSON response from ${path}:`, text.slice(0, 200));
+      throw new Error(`Server error (${r.status}) — check backend logs`);
+    }
+  });
 }
 
 export const ToastContext = createContext(() => {});
