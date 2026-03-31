@@ -1,7 +1,6 @@
 services:
   backend:
-    build:
-      context: https://github.com/YOURUSERNAME/pc-build-tracker.git#main:backend
+    image: ghcr.io/YOURUSERNAME/pc-build-tracker-backend:latest
     container_name: pc-build-tracker-api
     restart: unless-stopped
     volumes:
@@ -10,15 +9,14 @@ services:
       DB_PATH: /config/tracker.db
 
   frontend:
-    build:
-      context: https://github.com/YOURUSERNAME/pc-build-tracker.git#main:frontend
+    image: ghcr.io/YOURUSERNAME/pc-build-tracker-frontend:latest
     container_name: pc-build-tracker-ui
     restart: unless-stopped
     ports:
-      - "8080:80"
+      - "7236:80"
     depends_on:
       - backend
 
-# After deploying, open http://YOUR_NAS_IP:8080
-# Configure Discord webhook and email in the Settings tab
-# Add your parts in the Parts List tab
+# Replace YOURUSERNAME with your GitHub username (lowercase)
+# Images are auto-built and pushed to ghcr.io on every git push to main
+# In Dockge: use the Pull button to update to the latest build
