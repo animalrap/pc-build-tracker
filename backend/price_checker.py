@@ -8,7 +8,12 @@ from notifier import send_discord, send_email
 
 log = logging.getLogger(__name__)
 
-BROWSER_HEADERS = {
+# Retailers to exclude from results
+BLOCKED_RETAILERS = {"temu", "wish", "aliexpress"}
+
+
+def is_blocked(retailer: str) -> bool:
+    return retailer.lower().strip() in BLOCKED_RETAILERS
     "User-Agent": (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
         "AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -88,14 +93,8 @@ def fetch_pricesapi(query: str, api_key: str) -> list[dict]:
             )
             url   = item.get("url") or item.get("link") or item.get("productUrl") or ""
             title = item.get("title") or item.get("name") or query
-            if price > 0:
+            if price > 0 and not is_blocked(retailer):
                 results.append({
-                    "retailer": retailer,
-                    "price": price,
-                    "url": url,
-                    "title": title,
-                    "source": "pricesapi",
-                })
         except (ValueError, TypeError):
             continue
 
@@ -129,14 +128,8 @@ def fetch_slickdeals(query: str) -> list[dict]:
                 price = float(match.group(1).replace(",", ""))
             except ValueError:
                 continue
-            if price > 0:
+            if price > 0 and not any(b in title.lower() for b in BLOCKED_RETAILERS):
                 results.append({
-                    "retailer": "SlickDeals",
-                    "price": price,
-                    "url": link,
-                    "title": title,
-                    "source": "slickdeals",
-                })
     except ET.ParseError as e:
         log.warning(f"SlickDeals parse error: {e}")
     except Exception as e:
