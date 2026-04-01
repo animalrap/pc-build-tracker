@@ -1,6 +1,69 @@
 import React, { useEffect, useState } from 'react';
 import { api, useToast } from '../App';
 
+
+// Known retailers for the quick-add buttons
+const KNOWN_RETAILERS = [
+  'Temu', 'Wish', 'AliExpress', 'Walmart', 'Amazon', 'Newegg',
+  'Best Buy', 'Micro Center', 'B&H Photo', 'Adorama', 'Antonline',
+];
+
+function BlockedRetailers({ value, onChange }) {
+  const blocked = value
+    ? value.split(',').map(r => r.trim().toLowerCase()).filter(Boolean)
+    : [];
+
+  const toggle = (retailer) => {
+    const lower = retailer.toLowerCase();
+    const updated = blocked.includes(lower)
+      ? blocked.filter(r => r !== lower)
+      : [...blocked, lower];
+    onChange(updated.join(','));
+  };
+
+  return (
+    <div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
+        {KNOWN_RETAILERS.map(r => {
+          const isBlocked = blocked.includes(r.toLowerCase());
+          return (
+            <button
+              key={r}
+              onClick={() => toggle(r)}
+              style={{
+                padding: '4px 12px', borderRadius: 6, fontSize: 12,
+                fontWeight: 500, cursor: 'pointer', border: 'none',
+                background: isBlocked
+                  ? 'rgba(242,68,5,0.15)' : 'rgba(34,186,187,0.1)',
+                color: isBlocked ? '#ff9a7a' : 'var(--teal-mid)',
+                outline: isBlocked
+                  ? '1px solid rgba(242,68,5,0.3)' : '1px solid rgba(34,186,187,0.2)',
+                transition: 'all 0.15s',
+              }}
+            >
+              {isBlocked ? '✕ ' : '+ '}{r}
+            </button>
+          );
+        })}
+      </div>
+      <div style={{ fontSize: 12, color: 'var(--text-dim)', marginBottom: 6 }}>
+        Custom (comma-separated):
+      </div>
+      <input
+        className="form-input"
+        placeholder="e.g. temu,wish,aliexpress"
+        value={value}
+        onChange={e => onChange(e.target.value)}
+      />
+      {blocked.length > 0 && (
+        <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 6 }}>
+          Currently blocking: {blocked.join(', ')}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Settings() {
   const [form, setForm] = useState({
     discord_webhook: '',
@@ -12,6 +75,7 @@ export default function Settings() {
     total_budget: 0,
     pricesapi_key: '',
     slickdeals_enabled: 1,
+    blocked_retailers: 'temu,wish,aliexpress',
   });
   const [hasApiKey, setHasApiKey]         = useState(false);
   const [hasEmailPw, setHasEmailPw]       = useState(false);
@@ -36,6 +100,7 @@ export default function Settings() {
         check_interval_minutes: s.check_interval_minutes ?? f.check_interval_minutes,
         total_budget:           s.total_budget           ?? f.total_budget,
         slickdeals_enabled:     s.slickdeals_enabled     ?? f.slickdeals_enabled,
+        blocked_retailers:      s.blocked_retailers      ?? f.blocked_retailers,
         // leave pricesapi_key and email_password blank — user must re-enter to change
       }));
     });
@@ -265,6 +330,17 @@ export default function Settings() {
         <div style={{ fontSize: 12, color: '#64748b', lineHeight: 1.6 }}>
           Gmail users: generate an App Password at myaccount.google.com/apppasswords
         </div>
+      </div>
+
+      <div className="card" style={{ marginBottom: 16 }}>
+        <div className="section-title">Blocked retailers</div>
+        <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 12, lineHeight: 1.6 }}>
+          Prices from these retailers will be ignored and removed from history. Comma-separated, case-insensitive.
+        </p>
+        <BlockedRetailers
+          value={form.blocked_retailers}
+          onChange={v => field('blocked_retailers', v)}
+        />
       </div>
 
       <button className="btn btn-primary" onClick={save}>Save settings</button>

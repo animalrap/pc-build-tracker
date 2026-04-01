@@ -3,13 +3,10 @@ import time
 import logging
 import requests
 import xml.etree.ElementTree as ET
-from db import get_db
+from db import get_db, get_blocked_retailers
 from notifier import send_discord, send_email
 
 log = logging.getLogger(__name__)
-
-# Retailers to exclude from all results
-BLOCKED_RETAILERS = {"temu", "wish", "aliexpress"}
 
 BROWSER_HEADERS = {
     "User-Agent": (
@@ -21,13 +18,10 @@ BROWSER_HEADERS = {
 }
 
 
-def is_blocked(retailer: str) -> bool:
-    return retailer.lower().strip() in BLOCKED_RETAILERS
-
 
 # ── PricesAPI.io ──────────────────────────────────────────────────────────────
 
-def fetch_pricesapi(query: str, api_key: str) -> list[dict]:
+def fetch_pricesapi(query: str, api_key: str, blocked: set) -> list[dict]:
     if not api_key:
         return []
 
@@ -96,7 +90,7 @@ def fetch_pricesapi(query: str, api_key: str) -> list[dict]:
             url   = item.get("url") or item.get("link") or item.get("productUrl") or ""
             title = item.get("title") or item.get("name") or query
 
-            if price > 0 and not is_blocked(retailer):
+            if price > 0 and retailer.lower().strip() not in blocked:
                 results.append({
                     "retailer": retailer,
                     "price": price,
@@ -113,7 +107,7 @@ def fetch_pricesapi(query: str, api_key: str) -> list[dict]:
 
 # ── SlickDeals RSS ────────────────────────────────────────────────────────────
 
-def fetch_slickdeals(query: str) -> list[dict]:
+def fetch_slickdeals(query: str, blocked: set) -> list[dict]:
     url = (
         "https://slickdeals.net/newsearch.php"
         f"?q={query.replace(' ', '+')}"
@@ -138,8 +132,7 @@ def fetch_slickdeals(query: str) -> list[dict]:
             except ValueError:
                 continue
 
-            # Block deals mentioning blocked retailers in the title
-            if any(b in title.lower() for b in BLOCKED_RETAILERS):
+            if any(b in title.lower() for b in blocked):
                 continue
 
             if price > 0:
@@ -163,11 +156,12 @@ def fetch_slickdeals(query: str) -> list[dict]:
 
 def get_prices(query: str, api_key: str = "", use_slickdeals: bool = True) -> list[dict]:
     """Fetch from all enabled sources, deduplicated by (retailer, price)."""
+    blocked = get_blocked_retailers()
     results = []
     if api_key:
-        results.extend(fetch_pricesapi(query, api_key))
+        results.extend(fetch_pricesapi(query, api_key, blocked))
     if use_slickdeals:
-        results.extend(fetch_slickdeals(query))
+        results.extend(fetch_slickdeals(query, blocked))
 
     seen, deduped = set(), []
     for r in results:

@@ -11,7 +11,7 @@ from pydantic import BaseModel
 from typing import Optional
 from price_checker import check_all_parts, get_prices
 from notifier import send_discord, send_email
-from db import init_db, get_db
+from db import init_db, get_db, purge_blocked_from_history
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 log = logging.getLogger(__name__)
@@ -56,6 +56,7 @@ class Settings(BaseModel):
     total_budget: Optional[float] = 0
     pricesapi_key: Optional[str] = ""
     slickdeals_enabled: Optional[int] = 1
+    blocked_retailers: Optional[str] = "temu,wish,aliexpress"
 
 
 # ── Parts CRUD ────────────────────────────────────────────────────────────────
@@ -192,7 +193,6 @@ def get_settings():
         if not row:
             return {}
         d = dict(row)
-        # Never expose secrets — return boolean presence flags instead
         d["has_email_password"] = bool(d.pop("email_password", ""))
         d["has_pricesapi_key"]  = bool(d.pop("pricesapi_key", ""))
         return d
@@ -204,30 +204,34 @@ def save_settings(s: Settings):
         existing = db.execute("SELECT * FROM settings WHERE id=1").fetchone()
         if existing:
             existing = dict(existing)
-            # Preserve existing secrets if the submitted value is blank
             email_password = s.email_password if s.email_password else existing.get("email_password", "")
             pricesapi_key  = s.pricesapi_key  if s.pricesapi_key  else existing.get("pricesapi_key", "")
             db.execute(
                 """UPDATE settings SET discord_webhook=?, email_from=?, email_to=?,
                    email_password=?, email_smtp_host=?, email_smtp_port=?,
                    check_interval_minutes=?, total_budget=?,
-                   pricesapi_key=?, slickdeals_enabled=? WHERE id=1""",
+                   pricesapi_key=?, slickdeals_enabled=?, blocked_retailers=? WHERE id=1""",
                 (s.discord_webhook, s.email_from, s.email_to, email_password,
                  s.email_smtp_host, s.email_smtp_port, s.check_interval_minutes,
-                 s.total_budget, pricesapi_key, s.slickdeals_enabled)
+                 s.total_budget, pricesapi_key, s.slickdeals_enabled, s.blocked_retailers)
             )
         else:
             db.execute(
                 """INSERT INTO settings (id, discord_webhook, email_from, email_to,
                    email_password, email_smtp_host, email_smtp_port,
-                   check_interval_minutes, total_budget, pricesapi_key, slickdeals_enabled)
-                   VALUES (1,?,?,?,?,?,?,?,?,?,?)""",
+                   check_interval_minutes, total_budget, pricesapi_key,
+                   slickdeals_enabled, blocked_retailers)
+                   VALUES (1,?,?,?,?,?,?,?,?,?,?,?)""",
                 (s.discord_webhook, s.email_from, s.email_to, s.email_password,
                  s.email_smtp_host, s.email_smtp_port, s.check_interval_minutes,
-                 s.total_budget, s.pricesapi_key, s.slickdeals_enabled)
+                 s.total_budget, s.pricesapi_key, s.slickdeals_enabled, s.blocked_retailers)
             )
+    # Purge history for any newly blocked retailers immediately
+    purged = purge_blocked_from_history()
+    if purged:
+        log.info(f"Purged {purged} price history rows for blocked retailers")
     restart_scheduler()
-    return {"ok": True}
+    return {"ok": True, "purged": purged}
 
 
 @app.get("/api/quota")
@@ -281,7 +285,17 @@ def start_scheduler():
     _scheduler_thread.start()
     log.info("Scheduler started")
 
+@app.post("/api/purge-blocked")
+def purge_blocked():
+    """Manually purge all price history for currently blocked retailers."""
+    purged = purge_blocked_from_history()
+    return {"ok": True, "purged": purged}
+
+
 @app.on_event("startup")
 def startup():
+    purged = purge_blocked_from_history()
+    if purged:
+        log.info(f"Startup: purged {purged} blocked retailer rows from history")
     start_scheduler()
     log.info("PC Build Tracker started")

@@ -4,6 +4,9 @@ from contextlib import contextmanager
 
 DB_PATH = os.getenv("DB_PATH", "/config/tracker.db")
 
+# Default blocked retailers
+DEFAULT_BLOCKED = "temu,wish,aliexpress"
+
 
 def init_db():
     os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
@@ -48,21 +51,58 @@ def init_db():
                 check_interval_minutes INTEGER DEFAULT 120,
                 total_budget REAL DEFAULT 0,
                 pricesapi_key TEXT DEFAULT '',
-                slickdeals_enabled INTEGER DEFAULT 1
+                slickdeals_enabled INTEGER DEFAULT 1,
+                blocked_retailers TEXT DEFAULT 'temu,wish,aliexpress'
             );
         """)
 
-        # Safe migrations for existing DBs — ignore errors if column already exists
+        # Safe migrations
         migrations = [
             "ALTER TABLE settings ADD COLUMN pricesapi_key TEXT DEFAULT ''",
             "ALTER TABLE settings ADD COLUMN slickdeals_enabled INTEGER DEFAULT 1",
             "ALTER TABLE settings ADD COLUMN total_budget REAL DEFAULT 0",
+            f"ALTER TABLE settings ADD COLUMN blocked_retailers TEXT DEFAULT '{DEFAULT_BLOCKED}'",
         ]
         for sql in migrations:
             try:
                 db.execute(sql)
             except Exception:
-                pass  # column already exists
+                pass
+
+
+def get_blocked_retailers() -> set[str]:
+    """Return the current set of blocked retailer names (lowercase)."""
+    try:
+        with get_db() as db:
+            row = db.execute(
+                "SELECT blocked_retailers FROM settings WHERE id=1"
+            ).fetchone()
+            if row and row["blocked_retailers"]:
+                return {r.strip().lower() for r in row["blocked_retailers"].split(",") if r.strip()}
+    except Exception:
+        pass
+    return {r.strip().lower() for r in DEFAULT_BLOCKED.split(",")}
+
+
+def purge_blocked_from_history():
+    """Delete price_history rows for currently blocked retailers."""
+    blocked = get_blocked_retailers()
+    if not blocked:
+        return 0
+    with get_db() as db:
+        placeholders = ",".join("?" for _ in blocked)
+        # SQLite LOWER() for case-insensitive match
+        result = db.execute(
+            f"DELETE FROM price_history WHERE LOWER(retailer) IN ({placeholders})",
+            list(blocked)
+        )
+        deleted = result.rowcount
+        # Also clean alert_state
+        db.execute(
+            f"DELETE FROM alert_state WHERE LOWER(retailer) IN ({placeholders})",
+            list(blocked)
+        )
+    return deleted
 
 
 @contextmanager
