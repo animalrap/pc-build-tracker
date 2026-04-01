@@ -4,12 +4,12 @@ import { api, useToast } from '../App';
 const CATEGORIES = ['Motherboard', 'CPU', 'GPU', 'RAM', 'Storage', 'Case', 'PSU', 'Cooling', 'Other'];
 
 const EMPTY_PART = {
-  name: '', category: 'Motherboard', search_query: '', target_price: '', notes: ''
+  name: '', category: 'Motherboard', search_query: '', target_price: '', notes: '', required_keywords: ''
 };
 
 // Pre-filled suggestions for quick-add
 const SUGGESTIONS = [
-  { name: 'MSI MAG X870E Tomahawk WiFi', category: 'Motherboard', search_query: 'MSI MAG X870E Tomahawk WiFi motherboard AM5', target_price: 269 },
+  { name: 'MSI MAG X870E Tomahawk WiFi', category: 'Motherboard', search_query: 'MSI MAG X870E Tomahawk WiFi motherboard AM5', target_price: 269, required_keywords: 'X870E' },
 ];
 
 export default function Parts() {
@@ -202,6 +202,21 @@ export default function Parts() {
                 ))}
               </div>
             )}
+
+            <div className="form-row">
+              <div className="form-group" style={{ gridColumn: '1 / -1' }}>
+                <label className="form-label">
+                  Required keywords
+                  <span style={{ fontWeight: 400, color: 'var(--text-dim)', marginLeft: 6 }}>
+                    — results must contain ALL of these (comma-separated)
+                  </span>
+                </label>
+                <input className="form-input"
+                  placeholder="e.g. X870E  (prevents X870 results matching)"
+                  value={form.required_keywords}
+                  onChange={e => field('required_keywords', e.target.value)} />
+              </div>
+            </div>
 
             <div className="form-row">
               <div className="form-group" style={{ gridColumn: '1 / -1' }}>

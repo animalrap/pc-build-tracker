@@ -35,6 +35,7 @@ class Part(BaseModel):
     search_query: str
     target_price: float
     notes: Optional[str] = ""
+    required_keywords: Optional[str] = ""
 
 
 class PartUpdate(BaseModel):
@@ -43,6 +44,7 @@ class PartUpdate(BaseModel):
     search_query: Optional[str] = None
     target_price: Optional[float] = None
     notes: Optional[str] = None
+    required_keywords: Optional[str] = None
 
 
 class Settings(BaseModel):
@@ -71,8 +73,8 @@ def list_parts():
 def add_part(part: Part):
     with get_db() as db:
         db.execute(
-            "INSERT INTO parts (name, category, search_query, target_price, notes) VALUES (?,?,?,?,?)",
-            (part.name, part.category, part.search_query, part.target_price, part.notes)
+            "INSERT INTO parts (name, category, search_query, target_price, notes, required_keywords) VALUES (?,?,?,?,?,?)",
+            (part.name, part.category, part.search_query, part.target_price, part.notes, part.required_keywords)
         )
     return {"ok": True}
 

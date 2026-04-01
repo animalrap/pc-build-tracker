@@ -19,6 +19,7 @@ def init_db():
                 search_query TEXT NOT NULL,
                 target_price REAL NOT NULL,
                 notes TEXT DEFAULT '',
+                required_keywords TEXT DEFAULT '',
                 created_at TEXT DEFAULT (datetime('now'))
             );
 
@@ -62,6 +63,7 @@ def init_db():
             "ALTER TABLE settings ADD COLUMN slickdeals_enabled INTEGER DEFAULT 1",
             "ALTER TABLE settings ADD COLUMN total_budget REAL DEFAULT 0",
             f"ALTER TABLE settings ADD COLUMN blocked_retailers TEXT DEFAULT '{DEFAULT_BLOCKED}'",
+            "ALTER TABLE parts ADD COLUMN required_keywords TEXT DEFAULT ''",
         ]
         for sql in migrations:
             try:

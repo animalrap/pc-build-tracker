@@ -220,6 +220,21 @@ def check_all_parts():
     for part in [dict(p) for p in parts]:
         log.info(f"  [{part['name']}] target ${part['target_price']:.2f}")
         prices = get_prices(part["search_query"], api_key, use_slickdeals)
+
+        # Filter by required keywords if set
+        required = [
+            kw.strip().lower()
+            for kw in (part.get("required_keywords") or "").split(",")
+            if kw.strip()
+        ]
+        if required:
+            before = len(prices)
+            prices = [
+                p for p in prices
+                if all(kw in (p.get("title") or p.get("retailer") or "").lower() for kw in required)
+            ]
+            if before != len(prices):
+                log.info(f"    Keyword filter '{','.join(required)}' removed {before - len(prices)} result(s)")
         time.sleep(2)
 
         if not prices:
