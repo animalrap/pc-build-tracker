@@ -8,12 +8,10 @@ from notifier import send_discord, send_email
 
 log = logging.getLogger(__name__)
 
-# Retailers to exclude from results
+# Retailers to exclude from all results
 BLOCKED_RETAILERS = {"temu", "wish", "aliexpress"}
 
-
-def is_blocked(retailer: str) -> bool:
-    return retailer.lower().strip() in BLOCKED_RETAILERS
+BROWSER_HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
         "AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -21,6 +19,10 @@ def is_blocked(retailer: str) -> bool:
     ),
     "Accept-Language": "en-US,en;q=0.9",
 }
+
+
+def is_blocked(retailer: str) -> bool:
+    return retailer.lower().strip() in BLOCKED_RETAILERS
 
 
 # ── PricesAPI.io ──────────────────────────────────────────────────────────────
@@ -51,7 +53,7 @@ def fetch_pricesapi(query: str, api_key: str) -> list[dict]:
         log.info(f"    PricesAPI: no products found for '{query}'")
         return []
 
-    # Step 2 — fetch offers for the best matching product (first result)
+    # Step 2 — fetch offers for the best matching product
     product_id = products[0].get("id")
     if not product_id:
         return []
@@ -61,7 +63,7 @@ def fetch_pricesapi(query: str, api_key: str) -> list[dict]:
             f"{base}/products/{product_id}/offers",
             headers=headers,
             params={"country": "us"},
-            timeout=30,  # real-time scraping can take up to 30s per docs
+            timeout=30,
         )
         resp.raise_for_status()
         data = resp.json()
@@ -93,8 +95,15 @@ def fetch_pricesapi(query: str, api_key: str) -> list[dict]:
             )
             url   = item.get("url") or item.get("link") or item.get("productUrl") or ""
             title = item.get("title") or item.get("name") or query
+
             if price > 0 and not is_blocked(retailer):
                 results.append({
+                    "retailer": retailer,
+                    "price": price,
+                    "url": url,
+                    "title": title,
+                    "source": "pricesapi",
+                })
         except (ValueError, TypeError):
             continue
 
@@ -128,8 +137,19 @@ def fetch_slickdeals(query: str) -> list[dict]:
                 price = float(match.group(1).replace(",", ""))
             except ValueError:
                 continue
-            if price > 0 and not any(b in title.lower() for b in BLOCKED_RETAILERS):
+
+            # Block deals mentioning blocked retailers in the title
+            if any(b in title.lower() for b in BLOCKED_RETAILERS):
+                continue
+
+            if price > 0:
                 results.append({
+                    "retailer": "SlickDeals",
+                    "price": price,
+                    "url": link,
+                    "title": title,
+                    "source": "slickdeals",
+                })
     except ET.ParseError as e:
         log.warning(f"SlickDeals parse error: {e}")
     except Exception as e:
@@ -139,7 +159,7 @@ def fetch_slickdeals(query: str) -> list[dict]:
     return results
 
 
-# ── Combined — this is what main.py imports ───────────────────────────────────
+# ── Combined ──────────────────────────────────────────────────────────────────
 
 def get_prices(query: str, api_key: str = "", use_slickdeals: bool = True) -> list[dict]:
     """Fetch from all enabled sources, deduplicated by (retailer, price)."""
